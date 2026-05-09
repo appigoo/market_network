@@ -175,12 +175,10 @@ def build_force_graph(
             cmin=-5,
             cmax=5,
             colorbar=dict(
-                title="漲跌 %",
+                title=dict(text="漲跌 %", font=dict(color=UI_COLORS["text_secondary"], size=11)),
                 thickness=12,
                 len=0.6,
-                bgcolor="rgba(0,0,0,0)",
                 tickfont=dict(color=UI_COLORS["text_secondary"], size=10),
-                titlefont=dict(color=UI_COLORS["text_secondary"], size=11),
             ),
             line=dict(width=1.5, color="rgba(255,255,255,0.2)"),
             showscale=True,
@@ -290,10 +288,9 @@ def build_heatmap(corr_matrix: pd.DataFrame) -> go.Figure:
         textfont=dict(size=9, color="white", family="IBM Plex Mono"),
         hovertemplate="%{y} / %{x}<br>相關: %{z:.3f}<extra></extra>",
         colorbar=dict(
-            title="相關係數",
+            title=dict(text="相關係數", font=dict(color=UI_COLORS["text_secondary"])),
             thickness=14,
             tickfont=dict(color=UI_COLORS["text_secondary"]),
-            titlefont=dict(color=UI_COLORS["text_secondary"]),
         ),
     ))
 
