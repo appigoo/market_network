@@ -115,9 +115,12 @@ def compute_cluster_stats(
         subset = returns[members]
         avg_ret = subset.mean().mean() * 100
         avg_vol = subset.std().mean() * np.sqrt(252) * 100
-        intra_corr = subset.corr().values
-        np.fill_diagonal(intra_corr, np.nan)
-        avg_corr = np.nanmean(intra_corr)
+        if len(members) > 1:
+            intra_corr = subset.corr().values.copy()
+            np.fill_diagonal(intra_corr, np.nan)
+            avg_corr = float(np.nanmean(intra_corr))
+        else:
+            avg_corr = 1.0
 
         records.append({
             "cluster_id": cid,
