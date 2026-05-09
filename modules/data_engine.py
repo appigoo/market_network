@@ -11,6 +11,12 @@ from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings("ignore")
 
+# curl_cffi 為可選依賴（加速 yfinance），沒有也可正常運行
+try:
+    import curl_cffi  # noqa
+except ImportError:
+    pass
+
 from config.settings import TIMEFRAMES, MARKET_CAP_B, DEFAULT_MARKET_CAP_B
 
 
