@@ -832,7 +832,13 @@ def main():
                 from modules.telegram_module import send_telegram
                 test_msg = f"🧪 *測試通知*\nRegime: `{regime}`\n時間: {last_update}"
                 ok = send_telegram(test_msg)
-                st.success("✅ 已發送") if ok else st.error("❌ 發送失敗（請檢查 API 設定）")
+                st.session_state["tg_test_result"] = "ok" if ok else "fail"
+                st.rerun()
+            tg_result = st.session_state.get("tg_test_result")
+            if tg_result == "ok":
+                st.success("✅ 已發送")
+            elif tg_result == "fail":
+                st.error("❌ 發送失敗（請檢查 API 設定）")
 
     # ══════════════════════════════════════════════════════
     # TAB 6: AI 分析
