@@ -29,11 +29,16 @@ from modules.cluster_engine   import (
 from modules.risk_engine      import (
     detect_market_regime, detect_capital_flow,
     generate_smart_signals, detect_market_panic, detect_vol_explosion,
+    detect_correlation_spike,
 )
 from modules.graph_engine     import (
     build_force_graph, build_heatmap, build_rolling_corr_chart,
 )
-from modules.ai_engine        import generate_market_summary, generate_telegram_alert
+from modules.ai_engine        import (
+    generate_market_summary, generate_telegram_alert,
+    analyze_force_graph, analyze_heatmap, analyze_cluster,
+    analyze_lead_lag, analyze_risk,
+)
 from modules.telegram_module  import send_deduped_alert
 
 
@@ -462,6 +467,20 @@ def render_quote_table(quotes_df: pd.DataFrame, tickers: list):
     st.markdown("".join(html), unsafe_allow_html=True)
 
 
+def render_ai_insight(key: str, result_text: str):
+    """顯示 AI 解讀結果"""
+    colors = UI_COLORS
+    if result_text:
+        st.markdown(
+            f'''<div style="background:{colors["bg_card"]};border:1px solid {colors["accent_purple"]}40;
+            border-left:3px solid {colors["accent_purple"]};border-radius:8px;padding:18px;margin-top:12px;">
+            <div style="font-family:Space Grotesk,sans-serif;font-size:13.5px;line-height:1.9;
+            color:{colors["text_primary"]};">{result_text.replace(chr(10), "<br>")}</div>
+            </div>''',
+            unsafe_allow_html=True,
+        )
+
+
 # ═══════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════
@@ -597,6 +616,18 @@ def main():
             st.markdown('<div class="terminal-card-title">報價</div>', unsafe_allow_html=True)
             render_quote_table(quotes_df, tickers)
 
+            st.divider()
+            st.markdown('<div class="terminal-card-title">🤖 AI 一鍵解讀</div>', unsafe_allow_html=True)
+            if st.button("🔍 解讀 Force Graph", use_container_width=True, key="ai_tab1"):
+                with st.spinner("AI 分析中..."):
+                    result = analyze_force_graph(
+                        regime, quotes_df, signals, flows,
+                        node_colors, G.number_of_edges(), risk_nodes,
+                    )
+                    st.session_state["ai_tab1_result"] = result
+                    st.rerun()
+            render_ai_insight("tab1", st.session_state.get("ai_tab1_result", ""))
+
     # ══════════════════════════════════════════════════════
     # TAB 2: HEATMAP
     # ══════════════════════════════════════════════════════
@@ -649,6 +680,21 @@ def main():
                 )
             else:
                 st.caption("暫無相關性爆升信號")
+
+        st.divider()
+        st.markdown('<div class="terminal-card-title">🤖 AI 一鍵解讀</div>', unsafe_allow_html=True)
+        if st.button("🔍 解讀 Heatmap 相關性", use_container_width=True, key="ai_tab2"):
+            _pair_a = st.session_state.get("pair_a", tickers[0] if tickers else "SPY")
+            _pair_b = st.session_state.get("pair_b", tickers[1] if len(tickers)>1 else "QQQ")
+            _roll   = rolling_corr_series(returns, _pair_a, _pair_b, 20)
+            _curr_c = float(_roll.iloc[-1]) if not _roll.empty else 0.0
+            _spikes = detect_corr_spikes(returns)
+            _spike_info = detect_correlation_spike(returns)
+            with st.spinner("AI 分析中..."):
+                result = analyze_heatmap(corr_matrix, _spike_info, _spikes, _pair_a, _pair_b, _curr_c)
+                st.session_state["ai_tab2_result"] = result
+                st.rerun()
+        render_ai_insight("tab2", st.session_state.get("ai_tab2_result", ""))
 
     # ══════════════════════════════════════════════════════
     # TAB 3: CLUSTER
@@ -712,6 +758,18 @@ def main():
                     }
                 )
 
+        st.divider()
+        st.markdown('<div class="terminal-card-title">🤖 AI 一鍵解讀</div>', unsafe_allow_html=True)
+        if st.button("🔍 解讀聚類結構", use_container_width=True, key="ai_tab3"):
+            _communities = {}
+            for t, cid in partition.items():
+                _communities.setdefault(cid, []).append(t)
+            with st.spinner("AI 分析中..."):
+                result = analyze_cluster(_communities, cluster_stats, centrality, regime, flows)
+                st.session_state["ai_tab3_result"] = result
+                st.rerun()
+        render_ai_insight("tab3", st.session_state.get("ai_tab3_result", ""))
+
     # ══════════════════════════════════════════════════════
     # TAB 4: LEAD-LAG
     # ══════════════════════════════════════════════════════
@@ -774,6 +832,15 @@ def main():
                     "方向":      st.column_config.TextColumn("方向"),
                 }
             )
+
+        st.divider()
+        st.markdown('<div class="terminal-card-title">🤖 AI 一鍵解讀</div>', unsafe_allow_html=True)
+        if st.button("🔍 解讀 Lead-Lag 領漲信號", use_container_width=True, key="ai_tab4"):
+            with st.spinner("AI 分析中..."):
+                result = analyze_lead_lag(ll_scores, ll_df, flows, regime, st.session_state["timeframe"])
+                st.session_state["ai_tab4_result"] = result
+                st.rerun()
+        render_ai_insight("tab4", st.session_state.get("ai_tab4_result", ""))
 
     # ══════════════════════════════════════════════════════
     # TAB 5: RISK
@@ -839,6 +906,21 @@ def main():
                 st.success("✅ 已發送")
             elif tg_result == "fail":
                 st.error("❌ 發送失敗（請檢查 API 設定）")
+
+        st.divider()
+        st.markdown('<div class="terminal-card-title">🤖 AI 一鍵解讀</div>', unsafe_allow_html=True)
+        if st.button("🔍 解讀風險狀況", use_container_width=True, key="ai_tab5"):
+            _vol_alerts = detect_vol_explosion(returns)
+            _panic      = detect_market_panic(quotes_df)
+            _spike_info = detect_correlation_spike(returns)
+            with st.spinner("AI 分析中..."):
+                result = analyze_risk(
+                    signals, regime, risk_score, _panic,
+                    _vol_alerts, _spike_info, flows, risk_nodes,
+                )
+                st.session_state["ai_tab5_result"] = result
+                st.rerun()
+        render_ai_insight("tab5", st.session_state.get("ai_tab5_result", ""))
 
     # ══════════════════════════════════════════════════════
     # TAB 6: AI 分析
