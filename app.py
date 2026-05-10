@@ -467,16 +467,31 @@ def render_quote_table(quotes_df: pd.DataFrame, tickers: list):
     st.markdown("".join(html), unsafe_allow_html=True)
 
 
+def _get_groq_available() -> bool:
+    """檢查 Groq API Key 是否可用"""
+    import os
+    return bool(os.environ.get("GROQ_API_KEY") or st.session_state.get("groq_api_key"))
+
+
 def render_ai_insight(key: str, result_text: str):
     """顯示 AI 解讀結果"""
     colors = UI_COLORS
-    if result_text:
+    if result_text and not result_text.startswith("⚠️"):
         st.markdown(
             f'''<div style="background:{colors["bg_card"]};border:1px solid {colors["accent_purple"]}40;
-            border-left:3px solid {colors["accent_purple"]};border-radius:8px;padding:18px;margin-top:12px;">
+            border-left:3px solid {colors["accent_purple"]};border-radius:8px;padding:20px;margin-top:8px;">
             <div style="font-family:Space Grotesk,sans-serif;font-size:13.5px;line-height:1.9;
             color:{colors["text_primary"]};">{result_text.replace(chr(10), "<br>")}</div>
             </div>''',
+            unsafe_allow_html=True,
+        )
+    elif not _get_groq_available():
+        st.markdown(
+            f'''<div style="background:{colors["bg_card"]};border:1px dashed {colors["border"]};
+            border-radius:8px;padding:14px;margin-top:8px;text-align:center;">
+            <span style="font-family:IBM Plex Mono;font-size:11px;color:{colors["text_secondary"]};">
+            連接 Groq API 後解讀將自動生成 · 免費申請：console.groq.com
+            </span></div>''',
             unsafe_allow_html=True,
         )
 
@@ -617,15 +632,13 @@ def main():
             render_quote_table(quotes_df, tickers)
 
             st.divider()
-            st.markdown('<div class="terminal-card-title">🤖 AI 一鍵解讀</div>', unsafe_allow_html=True)
-            if st.button("🔍 解讀 Force Graph", use_container_width=True, key="ai_tab1"):
-                with st.spinner("AI 分析中..."):
-                    result = analyze_force_graph(
-                        regime, quotes_df, signals, flows,
-                        node_colors, G.number_of_edges(), risk_nodes,
-                    )
-                    st.session_state["ai_tab1_result"] = result
-                    st.rerun()
+            st.markdown('<div class="terminal-card-title">📡 AI 市場解讀</div>', unsafe_allow_html=True)
+            _cache_key1 = f"ai_tab1_{st.session_state['timeframe']}_{st.session_state['corr_method']}"
+            if st.session_state.get("ai_tab1_key") != _cache_key1 and _get_groq_available():
+                with st.spinner(""):
+                    _r = analyze_force_graph(regime, quotes_df, signals, flows, node_colors, G.number_of_edges(), risk_nodes)
+                    st.session_state["ai_tab1_result"] = _r
+                    st.session_state["ai_tab1_key"] = _cache_key1
             render_ai_insight("tab1", st.session_state.get("ai_tab1_result", ""))
 
     # ══════════════════════════════════════════════════════
@@ -682,18 +695,19 @@ def main():
                 st.caption("暫無相關性爆升信號")
 
         st.divider()
-        st.markdown('<div class="terminal-card-title">🤖 AI 一鍵解讀</div>', unsafe_allow_html=True)
-        if st.button("🔍 解讀 Heatmap 相關性", use_container_width=True, key="ai_tab2"):
-            _pair_a = st.session_state.get("pair_a", tickers[0] if tickers else "SPY")
-            _pair_b = st.session_state.get("pair_b", tickers[1] if len(tickers)>1 else "QQQ")
-            _roll   = rolling_corr_series(returns, _pair_a, _pair_b, 20)
-            _curr_c = float(_roll.iloc[-1]) if not _roll.empty else 0.0
-            _spikes = detect_corr_spikes(returns)
-            _spike_info = detect_correlation_spike(returns)
-            with st.spinner("AI 分析中..."):
-                result = analyze_heatmap(corr_matrix, _spike_info, _spikes, _pair_a, _pair_b, _curr_c)
-                st.session_state["ai_tab2_result"] = result
-                st.rerun()
+        st.markdown('<div class="terminal-card-title">📡 AI 市場解讀</div>', unsafe_allow_html=True)
+        _cache_key2 = f"ai_tab2_{st.session_state['timeframe']}_{st.session_state['corr_method']}_{st.session_state['corr_window']}"
+        if st.session_state.get("ai_tab2_key") != _cache_key2 and _get_groq_available():
+            _pair_a2 = st.session_state.get("pair_a", tickers[0] if tickers else "SPY")
+            _pair_b2 = st.session_state.get("pair_b", tickers[1] if len(tickers)>1 else "QQQ")
+            _roll2   = rolling_corr_series(returns, _pair_a2, _pair_b2, 20)
+            _curr_c2 = float(_roll2.iloc[-1]) if not _roll2.empty else 0.0
+            _spikes2 = detect_corr_spikes(returns)
+            _spikeinfo2 = detect_correlation_spike(returns)
+            with st.spinner(""):
+                _r2 = analyze_heatmap(corr_matrix, _spikeinfo2, _spikes2, _pair_a2, _pair_b2, _curr_c2)
+                st.session_state["ai_tab2_result"] = _r2
+                st.session_state["ai_tab2_key"] = _cache_key2
         render_ai_insight("tab2", st.session_state.get("ai_tab2_result", ""))
 
     # ══════════════════════════════════════════════════════
@@ -759,15 +773,16 @@ def main():
                 )
 
         st.divider()
-        st.markdown('<div class="terminal-card-title">🤖 AI 一鍵解讀</div>', unsafe_allow_html=True)
-        if st.button("🔍 解讀聚類結構", use_container_width=True, key="ai_tab3"):
-            _communities = {}
+        st.markdown('<div class="terminal-card-title">📡 AI 市場解讀</div>', unsafe_allow_html=True)
+        _cache_key3 = f"ai_tab3_{st.session_state['timeframe']}_{len(partition)}"
+        if st.session_state.get("ai_tab3_key") != _cache_key3 and _get_groq_available():
+            _comm3 = {}
             for t, cid in partition.items():
-                _communities.setdefault(cid, []).append(t)
-            with st.spinner("AI 分析中..."):
-                result = analyze_cluster(_communities, cluster_stats, centrality, regime, flows)
-                st.session_state["ai_tab3_result"] = result
-                st.rerun()
+                _comm3.setdefault(cid, []).append(t)
+            with st.spinner(""):
+                _r3 = analyze_cluster(_comm3, cluster_stats, centrality, regime, flows)
+                st.session_state["ai_tab3_result"] = _r3
+                st.session_state["ai_tab3_key"] = _cache_key3
         render_ai_insight("tab3", st.session_state.get("ai_tab3_result", ""))
 
     # ══════════════════════════════════════════════════════
@@ -834,12 +849,13 @@ def main():
             )
 
         st.divider()
-        st.markdown('<div class="terminal-card-title">🤖 AI 一鍵解讀</div>', unsafe_allow_html=True)
-        if st.button("🔍 解讀 Lead-Lag 領漲信號", use_container_width=True, key="ai_tab4"):
-            with st.spinner("AI 分析中..."):
-                result = analyze_lead_lag(ll_scores, ll_df, flows, regime, st.session_state["timeframe"])
-                st.session_state["ai_tab4_result"] = result
-                st.rerun()
+        st.markdown('<div class="terminal-card-title">📡 AI 市場解讀</div>', unsafe_allow_html=True)
+        _cache_key4 = f"ai_tab4_{st.session_state['timeframe']}_{len(ll_df)}"
+        if st.session_state.get("ai_tab4_key") != _cache_key4 and _get_groq_available():
+            with st.spinner(""):
+                _r4 = analyze_lead_lag(ll_scores, ll_df, flows, regime, st.session_state["timeframe"])
+                st.session_state["ai_tab4_result"] = _r4
+                st.session_state["ai_tab4_key"] = _cache_key4
         render_ai_insight("tab4", st.session_state.get("ai_tab4_result", ""))
 
     # ══════════════════════════════════════════════════════
@@ -908,18 +924,16 @@ def main():
                 st.error("❌ 發送失敗（請檢查 API 設定）")
 
         st.divider()
-        st.markdown('<div class="terminal-card-title">🤖 AI 一鍵解讀</div>', unsafe_allow_html=True)
-        if st.button("🔍 解讀風險狀況", use_container_width=True, key="ai_tab5"):
-            _vol_alerts = detect_vol_explosion(returns)
-            _panic      = detect_market_panic(quotes_df)
-            _spike_info = detect_correlation_spike(returns)
-            with st.spinner("AI 分析中..."):
-                result = analyze_risk(
-                    signals, regime, risk_score, _panic,
-                    _vol_alerts, _spike_info, flows, risk_nodes,
-                )
-                st.session_state["ai_tab5_result"] = result
-                st.rerun()
+        st.markdown('<div class="terminal-card-title">📡 AI 市場解讀</div>', unsafe_allow_html=True)
+        _cache_key5 = f"ai_tab5_{regime}_{risk_score}"
+        if st.session_state.get("ai_tab5_key") != _cache_key5 and _get_groq_available():
+            _vol5    = detect_vol_explosion(returns)
+            _panic5  = detect_market_panic(quotes_df)
+            _spike5  = detect_correlation_spike(returns)
+            with st.spinner(""):
+                _r5 = analyze_risk(signals, regime, risk_score, _panic5, _vol5, _spike5, flows, risk_nodes)
+                st.session_state["ai_tab5_result"] = _r5
+                st.session_state["ai_tab5_key"] = _cache_key5
         render_ai_insight("tab5", st.session_state.get("ai_tab5_result", ""))
 
     # ══════════════════════════════════════════════════════
