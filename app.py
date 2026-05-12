@@ -960,6 +960,7 @@ def main():
                         risk_info={"panic": detect_market_panic(quotes_df), "risk_score": risk_score},
                         cluster_info=communities_str,
                         timeframe=st.session_state["timeframe"],
+                        quotes_df=quotes_df,
                     )
                     st.session_state["ai_summary"] = summary
 
