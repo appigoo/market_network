@@ -64,6 +64,19 @@ def _call_groq(prompt: str) -> str:
 # ══════════════════════════════════════════════════════════
 # TAB 1: Force Graph 解讀
 # ══════════════════════════════════════════════════════════
+def _build_price_table(quotes_df) -> str:
+    """把真實股價格式化成 AI 可用的字符串"""
+    if quotes_df is None or quotes_df.empty:
+        return "  （無股價數據）"
+    lines = []
+    for t, row in quotes_df.iterrows():
+        price = row.get("price", 0)
+        chg   = row.get("chg_pct", 0)
+        if price > 0:
+            lines.append(f"  {t}: ${price:.2f} ({chg:+.2f}%)")
+    return "\n".join(lines) if lines else "  （無股價數據）"
+
+
 def analyze_force_graph(regime, quotes_df, signals, flows, node_colors, edge_count, risk_nodes):
     if not quotes_df.empty:
         sorted_q  = quotes_df["chg_pct"].sort_values(ascending=False)
@@ -83,7 +96,12 @@ def analyze_force_graph(regime, quotes_df, signals, flows, node_colors, edge_cou
     risk_str  = "、".join(risk_nodes) if risk_nodes else "無"
 
     # 計算正負邊比例（edge_count 是總邊數）
+    price_str = _build_price_table(quotes_df)
     prompt = f"""根據以下 Force Graph 市場網絡的完整數據，像分析師解讀真實圖表一樣，逐點詳細解讀。
+
+=== 真實股價（今日最新價）===
+{price_str}
+【重要規則】所有入場條件必須使用上方真實股價，例如「NVDA 現價 $XXX，突破 $XXX 入場」，禁止猜測任何價格數字。
 
 === 市場數據 ===
 市場 Regime：{regime}
@@ -368,7 +386,10 @@ def analyze_risk(signals, regime, risk_score, panic_info, vol_alerts, spike_info
     else:
         traffic = "🟢 綠燈 — 正常，按計劃操作"
 
+    # Build price table from flows keys approximation — risk doesn't have quotes_df
     prompt = f"""根據以下市場風險數據，像風控主管解讀真實風險儀表板一樣，逐點詳細解讀。
+
+【重要規則】給出對沖倉位建議時，只說倉位百分比（如「VXX 買入組合的5%對沖」），不要猜測任何具體股價數字。
 
 === 風險數據 ===
 市場 Regime：{regime}
@@ -430,12 +451,16 @@ SPY 今日：{panic_info.get('spy_chg', 0):+.2f}%
 # ══════════════════════════════════════════════════════════
 # TAB 6: 總覽 AI 分析
 # ══════════════════════════════════════════════════════════
-def generate_market_summary(regime, flows, signals, leaders, risk_info, cluster_info, timeframe="1d"):
+def generate_market_summary(regime, flows, signals, leaders, risk_info, cluster_info, timeframe="1d", quotes_df=None):
     flow_str   = "\n".join([f"  {k}: {v:+.2f}%" for k, v in list(flows.items())])
     signal_str = "\n".join([f"  [{s['severity'].upper()}] {s['message']}" for s in signals])
     leader_str = ", ".join([str(l) for l in leaders[:5]])
+    price_str  = _build_price_table(quotes_df)
 
     prompt = f"""根據以下完整市場數據，生成今日市場結構總覽報告。
+
+=== 真實股價（今日收盤/最新價）===
+{price_str}
 
 === 市場數據 ===
 時間週期：{timeframe}
@@ -452,6 +477,7 @@ def generate_market_summary(regime, flows, signals, leaders, risk_info, cluster_
 恐慌偵測：{risk_info}
 
 === 你的報告格式 ===
+【重要】入場條件必須使用上面的真實股價，例如「NVDA 現價 $XXX，突破 $XXX 入場」，禁止使用任何猜測的價格數字。
 
 1. **市場結構總覽**
 今天市場是什麼類型（Risk-On/Off/分化/恐慌），用數字說明
@@ -463,10 +489,10 @@ def generate_market_summary(regime, flows, signals, leaders, risk_info, cluster_
 誰在帶動市場，傳導鏈是什麼
 
 4. **風險提示**
-今天最值得警惕的風險是什麼，概率多高
+今天最值得警惕的風險是什麼
 
 5. **今日完整操作計劃**
-做多清單（股票+理由+入場條件）
+做多清單：每隻股票必須寫明「現價 $XXX，入場條件：突破/回調到 $XXX，止損 $XXX」
 做空/對沖清單（如有）
 絕對不碰清單（股票+理由）
 
